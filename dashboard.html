@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Dashboard Admin - Tri intelligent et valorisation énergétique des déchets</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <!-- Fonts & libs -->
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;500;700&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-database-compat.js"></script>
+  <script src="firebaseConfig.js"></script>
+
+  <!-- jsPDF + AutoTable -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.4/jspdf.plugin.autotable.min.js"></script>
+
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Poppins', sans-serif; background: linear-gradient(135deg, #e2f0f9, #f7f9fc); display: flex; min-height: 100vh; color: #264653; }
+    nav.sidebar { width: 250px; background-color: #2a9d8f; color: #fff; display: flex; flex-direction: column; padding: 30px 20px; border-top-right-radius: 30px; border-bottom-right-radius: 30px; box-shadow: 3px 0 15px rgba(0,0,0,0.12); position: fixed; height: 100vh; overflow-y: auto; }
+    nav.sidebar h1 { font-weight: 700; font-size: 24px; margin-bottom: 8px; text-align: center; }
+    nav.sidebar small { display: block; font-size: 13px; margin-bottom: 30px; text-align: center; opacity: 0.85; }
+    nav.sidebar a { display: block; padding: 14px 18px; margin-bottom: 10px; color: white; font-weight: 600; text-decoration: none; border-radius: 10px; transition: background-color 0.3s ease; cursor: pointer; user-select: none; }
+    nav.sidebar a.active, nav.sidebar a:hover { background-color: rgba(255,255,255,0.25); }
+    nav.sidebar button.logout-btn { margin-top: auto; background: #e76f51; border: none; padding: 14px 0; font-weight: 700; color: white; border-radius: 12px; cursor: pointer; transition: background-color 0.3s ease; user-select: none; }
+    nav.sidebar button.logout-btn:hover { background: #d3543a; }
+
+    main.content { margin-left: 250px; padding: 40px 50px; flex: 1; overflow-y: auto; min-height: 100vh; }
+    h2.section-title { font-size: 26px; margin-bottom: 25px; font-weight: 700; color: #264653; }
+
+    /* Table */
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; box-shadow: 0 0 8px rgba(0,0,0,0.05); border-radius: 8px; overflow: hidden; background: #fff; }
+    thead { background-color: #2a9d8f; color: white; }
+    th, td { padding: 12px 15px; text-align: center; border-bottom: 1px solid #eee; font-size: 14px; }
+    tbody tr:hover { background-color: #f7fbfd; }
+    tbody tr:last-child td { border-bottom: none; }
+
+    /* Form */
+    form#addCommandForm { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-top: 10px; }
+    form#addCommandForm input { padding: 8px 10px; border-radius: 8px; border: 1px solid #cbd5e1; font-size: 13px; }
+    form#addCommandForm input:focus { outline: none; border-color: #2a9d8f; box-shadow: 0 0 0 3px rgba(42,157,143,0.15); }
+    form#addCommandForm .wide { grid-column: span 2; }
+    form#addCommandForm .action-btn { grid-column: span 1; }
+
+    button.action-btn { background-color: #2a9d8f; color: white; border: none; padding: 8px 12px; border-radius: 8px; cursor: pointer; font-weight: 600; margin: 2px; transition: transform 0.05s ease, background-color 0.3s ease; }
+    button.action-btn:hover { background-color: #21867a; }
+    button.action-btn:active { transform: scale(0.98); }
+
+    #chartContainer { max-width: 700px; margin-top: 20px; }
+
+    @media (max-width: 1100px) {
+      form#addCommandForm { grid-template-columns: repeat(3, 1fr); }
+    }
+    @media (max-width: 768px) {
+      nav.sidebar { width: 72px; padding: 20px 10px; border-radius: 0; }
+      nav.sidebar h1, nav.sidebar small, nav.sidebar a span { display: none; }
+      nav.sidebar a { padding: 15px 0; margin-bottom: 15px; font-size: 18px; text-align: center; }
+      main.content { margin-left: 72px; padding: 20px; }
+      form#addCommandForm { grid-template-columns: repeat(2, 1fr); }
+    }
+
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    section { display: none; animation: fadeIn 0.3s ease forwards; }
+    section.active { display: block; }
+  </style>
+</head>
+<body>
+  <nav class="sidebar" aria-label="Menu principal">
+    <h1>Projet Jeunes Chercheurs</h1>
+    <small>Un pas vers la Durabilité Environnementale: Classification Intelligente des Ordures.</small>
+    <a href="#" data-section="commandes" class="active" aria-current="page">📦 <span>Commandes</span></a>
+    <a href="#" data-section="stock">📊 <span>Stock</span></a>
+    <a href="#" data-section="stats">📈 <span>Statistiques</span></a>
+    <button class="logout-btn" aria-label="Déconnexion" title="Déconnexion">Déconnexion</button>
+  </nav>
+
+  <main class="content" role="main">
+    <!-- Commandes -->
+    <section id="commandes" class="active" aria-label="Tableau de bord des commandes">
+      <h2 class="section-title">📦 Tableau de bord des commandes</h2>
+      <p>Voici la liste complète des commandes passées par les clients.</p>
+
+      <!-- Formulaire -->
+      <form id="addCommandForm">
+        <input type="text" id="client" placeholder="Nom du client" required class="wide" />
+        <input type="email" id="email" placeholder="Email" required />
+        <input type="tel" id="telephone" placeholder="Téléphone" required />
+        <input type="text" id="adresse" placeholder="Adresse" required class="wide" />
+        <input type="date" id="date" required />
+        <input type="number" id="inertes" placeholder="Inertes" min="0" required />
+        <input type="number" id="biodegradables" placeholder="Biodégradables" min="0" required />
+        <input type="number" id="recyclables" placeholder="Recyclables" min="0" required />
+        <input type="number" id="combustibles" placeholder="Combustibles" min="0" required />
+        <button type="submit" class="action-btn">Ajouter Commande</button>
+      </form>
+
+      <table aria-describedby="commandes-description">
+        <thead>
+          <tr>
+            <th>Client</th>
+            <th>Email</th>
+            <th>Adresse</th>
+            <th>Téléphone</th>
+            <th>Date</th>
+            <th>Inertes</th>
+            <th>Biodégradables</th>
+            <th>Recyclables</th>
+            <th>Combustibles</th>
+            <th>Total</th>
+            <th>Prix (DT)</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="commandesTableBody"></tbody>
+      </table>
+    </section>
+
+    <!-- Stock -->
+    <section id="stock" aria-label="Gestion de stock">
+      <h2 class="section-title">📊 Gestion de stock</h2>
+      <table aria-describedby="stock-description">
+        <thead>
+          <tr>
+            <th>Type de déchet</th>
+            <th>Quantité</th>
+            <th>Dernière mise à jour</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="stockTableBody"></tbody>
+      </table>
+    </section>
+
+    <!-- Statistiques -->
+    <section id="stats" aria-label="Statistiques des commandes">
+      <h2 class="section-title">📈 Statistiques</h2>
+      <p>Visualisation des totaux de commandes par type de déchet.</p>
+      <div id="chartContainer">
+        <canvas id="statsChart" aria-label="Graphique des statistiques des commandes" role="img"></canvas>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    // ---- Firebase ----
+    const db = firebase.database();
+
+    // ---- Navigation ----
+    const menuLinks = document.querySelectorAll('nav.sidebar a');
+    const sections = document.querySelectorAll('main.content section');
+    menuLinks.forEach(link => {
+      link.addEventListener('click', (e) => {
+        e.preventDefault();
+        const target = link.getAttribute('data-section');
+        menuLinks.forEach(l => l.classList.remove('active'));
+        link.classList.add('active');
+        sections.forEach(sec => sec.classList.toggle('active', sec.id === target));
+      });
+    });
+
+    // ---- Auth ----
+    document.querySelector('.logout-btn').addEventListener('click', () => {
+      firebase.auth().signOut().then(() => window.location.href = 'login.html');
+    });
+    firebase.auth().onAuthStateChanged(user => { if (!user) window.location.href = 'login.html'; });
+
+    // ---- Commandes ----
+    const commandesTableBody = document.getElementById('commandesTableBody');
+    const commandesCache = {}; // pour PDF par id
+
+    function dttn(dateStr) {
+      // format JJ/MM/AAAA
+      try {
+        const [y,m,d] = dateStr.includes('-') ? dateStr.split('-') : [null,null,null];
+        if (y && m && d) return `${d}/${m}/${y}`;
+      } catch {}
+      return dateStr || '-';
+    }
+
+    function formatDT(dtISO) {
+      if (!dtISO) return '-';
+      const d = new Date(dtISO);
+      return d.toLocaleString('fr-FR');
+    }
+
+    function loadCommandes() {
+      db.ref('commandes').on('value', snapshot => {
+        const data = snapshot.val() || {};
+        commandesTableBody.innerHTML = '';
+        for (const id in data) {
+          const c = data[id] || {};
+          commandesCache[id] = c;
+          const total = (Number(c.inertes)||0)+(Number(c.biodegradables)||0)+(Number(c.recyclables)||0)+(Number(c.combustibles)||0);
+          const prix = Number.isFinite(c.prix) ? c.prix : total * 5; // fallback
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td>${c.client || '-'}</td>
+            <td>${c.email || '-'}</td>
+            <td>${c.adresse || '-'}</td>
+            <td>${c.telephone || '-'}</td>
+            <td title="${formatDT(c.createdAt) || ''}">${dttn(c.date) || '-'}</td>
+            <td>${c.inertes || 0}</td>
+            <td>${c.biodegradables || 0}</td>
+            <td>${c.recyclables || 0}</td>
+            <td>${c.combustibles || 0}</td>
+            <td>${total}</td>
+            <td>${prix} DT</td>
+            <td>
+              <button class="action-btn" onclick="removeCommand('${id}')">Retirer</button>
+              <button class="action-btn" onclick="downloadPDF('${id}')">PDF</button>
+            </td>
+          `;
+          commandesTableBody.appendChild(tr);
+        }
+        updateStats(data);
+      });
+    }
+
+    // ---- Stock ----
+    const stockTableBody = document.getElementById('stockTableBody');
+    function loadStock() {
+      db.ref('stocks').on('value', snapshot => {
+        const stocks = snapshot.val() || {};
+        stockTableBody.innerHTML = '';
+        for (const type in stocks) {
+          const { quantite = 0, maj = '-' } = stocks[type] || {};
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td>${type}</td>
+            <td><input type="number" min="0" step="1" value="${quantite}" id="input-${type}" aria-label="Quantité de ${type}"></td>
+            <td>${maj}</td>
+            <td><button class="action-btn" onclick="updateStock('${type}')">Mettre à jour</button></td>
+          `;
+          stockTableBody.appendChild(tr);
+        }
+      });
+    }
+
+    window.updateStock = function(type) {
+      const input = document.getElementById(`input-${type}`);
+      let val = parseInt(input.value);
+      if (isNaN(val) || val < 0) return alert("Veuillez saisir un entier positif.");
+      if (!confirm(`Confirmer la mise à jour de "${type}" à ${val} unités ?`)) return;
+      const maj = new Date().toLocaleString('fr-FR');
+      db.ref('stocks/' + type).update({ quantite: val, maj });
+    }
+
+    // ---- Ajout d'une commande ----
+    document.getElementById('addCommandForm').addEventListener('submit', function(e) {
+      e.preventDefault();
+      const client = document.getElementById('client').value.trim();
+      const email = document.getElementById('email').value.trim();
+      const adresse = document.getElementById('adresse').value.trim();
+      const telephone = document.getElementById('telephone').value.trim();
+      const date = document.getElementById('date').value; // yyyy-mm-dd
+      const inertes = parseInt(document.getElementById('inertes').value) || 0;
+      const biodegradables = parseInt(document.getElementById('biodegradables').value) || 0;
+      const recyclables = parseInt(document.getElementById('recyclables').value) || 0;
+      const combustibles = parseInt(document.getElementById('combustibles').value) || 0;
+      const total = inertes + biodegradables + recyclables + combustibles;
+      const prix = total * 5; // Prix par lot
+      const createdAt = new Date().toISOString();
+
+      db.ref('commandes').push({
+        client, email, adresse, telephone,
+        date, inertes, biodegradables, recyclables, combustibles, total, prix,
+        createdAt
+      }).then(() => {
+        alert('Commande ajoutée avec succès !');
+        this.reset();
+      }).catch(err => console.error(err));
+    });
+
+    // ---- Supprimer commande ----
+    window.removeCommand = function(id) {
+      if (confirm("Êtes-vous sûr de vouloir retirer cette commande ?")) {
+        db.ref('commandes/' + id).remove().catch(err => console.error(err));
+      }
+    }
+
+    // ---- Statistiques ----
+    const ctx = document.getElementById('statsChart').getContext('2d');
+    let statsChart;
+    function updateStats(commandesData) {
+      const totals = { Inertes: 0, Biodégradables: 0, Recyclables: 0, Combustibles: 0 };
+      for (const id in commandesData) {
+        const c = commandesData[id];
+        totals.Inertes += Number(c.inertes) || 0;
+        totals.Biodégradables += Number(c.biodegradables) || 0;
+        totals.Recyclables += Number(c.recyclables) || 0;
+        totals.Combustibles += Number(c.combustibles) || 0;
+      }
+      if (statsChart) statsChart.destroy();
+      statsChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: Object.keys(totals),
+          datasets: [{
+            label: 'Quantité totale commandée',
+            data: Object.values(totals),
+            backgroundColor: ['#264653', '#2a9d8f', '#5cc8b5', '#e76f51'],
+            borderRadius: 8,
+            borderWidth: 1
+          }]
+        },
+        options: { responsive: true, plugins: { legend: { display: false }, tooltip: { enabled: true } }, scales: { y: { beginAtZero: true } } }
+      });
+    }
+
+    // ---- PDF Facture Pro ----
+    async function fetchAsDataURL(url) {
+      const res = await fetch(url);
+      const blob = await res.blob();
+      return new Promise(resolve => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result);
+        reader.readAsDataURL(blob);
+      });
+    }
+
+    window.downloadPDF = async function(id) {
+      const c = commandesCache[id];
+      if (!c) return alert("Commande introuvable.");
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+
+      // ---- Config société (PERSONNALISE ICI) ----
+      const company = {
+        name: "Projet Jeune chercheur developpé par Wala Youssef",
+        address: "Ecole nationnal d'ingénieur de Sfax",
+        phone: "+216 29 482 680",
+        email: "Youssef.wala@enis.tn",
+        website: "https://vente-dechets-20r7rt8yv-walas-projects-5ba06045.vercel.app/",
+        logoUrl: "https://static.vecteezy.com/system/resources/previews/002/756/861/large_2x/recycling-icon-an-arrow-that-revolves-endlessly-reuse-concept-recycled-vector.jpg" // REMPLACE ICI
+      };
+
+      // ---- Logo ----
+      try {
+        const logoDataURL = await fetchAsDataURL(company.logoUrl);
+        doc.addImage(logoDataURL, "PNG", 14, 10, 26, 26);
+      } catch { /* ignore si logo non chargé */ }
+
+      // ---- En-tête société ----
+      doc.setFontSize(18);
+      doc.text(company.name, 44, 18);
+      doc.setFontSize(11);
+      doc.text(company.address, 44, 24);
+      doc.text(`Tél : ${company.phone}`, 44, 30);
+      doc.text(`Email : ${company.email}`, 44, 36);
+
+      // Ligne séparatrice
+      doc.setDrawColor(130);
+      doc.setLineWidth(0.4);
+      doc.line(14, 42, 196, 42);
+
+      // ---- Infos facture ----
+      const factureNo = `FAC-${id.slice(-6).toUpperCase()}`;
+      doc.setFontSize(15);
+      doc.text("FACTURE / BON DE COMMANDE", 14, 52);
+      doc.setFontSize(11);
+      const createdTxt = c.createdAt ? new Date(c.createdAt).toLocaleString('fr-FR') : new Date().toLocaleString('fr-FR');
+      doc.text(`N° : ${factureNo}`, 14, 60);
+      doc.text(`Date & heure : ${createdTxt}`, 14, 66);
+      //doc.text(`Site : ${company.website}`, 14, 72);
+
+      // ---- Bloc client ----
+      doc.setFont(undefined, 'bold');
+      doc.text("Client", 120, 52);
+      doc.setFont(undefined, 'normal');
+      const clientLines = [
+        `Nom : ${c.client || '-'}`,
+        `Email : ${c.email || '-'}`,
+        `Téléphone : ${c.telephone || '-'}`,
+        `Adresse : ${c.adresse || '-'}`
+      ];
+      let y = 58;
+      clientLines.forEach(line => { doc.text(line, 120, y); y += 6; });
+
+      // ---- Détails tableau ----
+      const total = (Number(c.inertes)||0)+(Number(c.biodegradables)||0)+(Number(c.recyclables)||0)+(Number(c.combustibles)||0);
+      const prix = Number.isFinite(c.prix) ? c.prix : total * 5;
+
+      doc.autoTable({
+        startY: 82,
+        head: [['Référence', 'Description', 'Qté (lots)', 'Prix unitaire (DT)', 'Montant (DT)']],
+        body: [
+          ['INRT', 'Inertes', c.inertes || 0, '5', (c.inertes || 0) * 5],
+          ['BIO', 'Biodégradables', c.biodegradables || 0, '5', (c.biodegradables || 0) * 5],
+          ['RECY', 'Recyclables', c.recyclables || 0, '5', (c.recyclables || 0) * 5],
+          ['COMB', 'Combustibles', c.combustibles || 0, '5', (c.combustibles || 0) * 5],
+        ],
+        theme: 'grid',
+        styles: { halign: 'center', fontSize: 10, cellPadding: 3 },
+        headStyles: { fillColor: [42, 157, 143], textColor: 255 },
+        columnStyles: { 1: { halign: 'left' } },
+        foot: [['', '', 'Total (lots)', total, '']],
+        footStyles: { fillColor: [230, 244, 241] }
+      });
+
+      const afterTableY = doc.lastAutoTable.finalY || 120;
+
+      // ---- Récapitulatif ----
+      doc.setFontSize(12);
+      doc.setFont(undefined, 'bold');
+      doc.text("Récapitulatif", 14, afterTableY + 10);
+      doc.setFont(undefined, 'normal');
+      doc.text(`Total commandé : ${total} lots`, 14, afterTableY + 18);
+
+      // Encadré total à payer
+      doc.setDrawColor(42, 157, 143);
+      doc.setLineWidth(0.6);
+      doc.roundedRect(130, afterTableY + 6, 66, 18, 2, 2);
+      doc.setFontSize(13);
+      doc.setFont(undefined, 'bold');
+      doc.text("TOTAL À PAYER", 133, afterTableY + 13);
+      doc.setFontSize(16);
+      doc.text(`${prix} DT`, 133, afterTableY + 22);
+
+      // ---- Notes & pied de page ----
+      doc.setFontSize(10);
+      doc.setFont(undefined, 'normal');
+      doc.text("Notes :", 14, afterTableY + 36);
+      doc.text("• Merci pour votre confiance. Conservez cette facture pour vos dossiers.", 14, afterTableY + 42);
+      doc.text("• Règlement à réception. Pour toute question, contactez notre support.", 14, afterTableY + 48);
+
+      // Signature
+      doc.text("Signature :", 160, afterTableY + 36);
+      doc.line(175, afterTableY + 36, 196, afterTableY + 36);
+
+      // Footer
+      //doc.setTextColor(120);
+      //doc.text(`${company.name}—${company.address}—\n${company.phone}—${company.email}`, 14, 287);
+
+      // Nom de fichier
+      const safeClient = (c.client || 'client').replace(/[^\p{L}\p{N}_-]+/gu, '_');
+      doc.save(`facture_${safeClient}_${factureNo}.pdf`);
+    };
+
+    // ---- Init ----
+    loadCommandes();
+    loadStock();
+  </script>
+</body>
+</html>
